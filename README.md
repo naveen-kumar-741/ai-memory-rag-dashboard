@@ -18,7 +18,7 @@ To use this React component in your project, ensure you have:
 
 - **Node.js**: `v18.0.0` or higher.
 - **React**: `^18.0.0` or `^19.0.0`.
-- **Tailwind CSS**: `^3.0.0` configured in your build system (Next.js, Vite, CRA, etc.).
+- **Tailwind CSS**: `^4.0.0` (or v3.x) configured in your host project.
 - **Backend**: A running instance of the AI Memory + RAG FastAPI backend service (`http://localhost:8000`).
 
 ---
@@ -40,32 +40,14 @@ yarn add ai-memory-rag-dashboard lucide-react
 pnpm add ai-memory-rag-dashboard lucide-react
 ```
 
-### Step 2: Ensure Tailwind CSS Configuration
+### Step 2: Import the Component and Styles
 
-Make sure Tailwind CSS scans your `node_modules` directory for styling. Update `tailwind.config.js`:
-
-```javascript
-module.exports = {
-  content: [
-    './src/**/*.{js,jsx,ts,tsx}',
-    './node_modules/ai-memory-rag-dashboard/dist/**/*.{js,mjs}',
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-```
-
----
-
-## 💻 Usage
-
-Embed the `AIMemoryDashboard` component in your React / Next.js application:
+In your React application, make sure to import both the component and the package's compiled stylesheet at your app root (e.g., in `App.tsx`, `main.tsx`, or your root layout file):
 
 ```tsx
 import React from 'react';
 import { AIMemoryDashboard } from 'ai-memory-rag-dashboard';
+import 'ai-memory-rag-dashboard/css'; // Crucial for Tailwind styles to apply
 
 export default function DashboardPage() {
   return (

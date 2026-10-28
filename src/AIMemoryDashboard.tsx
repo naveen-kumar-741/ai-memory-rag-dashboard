@@ -60,14 +60,12 @@ export const AIMemoryDashboard: React.FC = () => {
   const [chatInput, setChatInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Inspector State
-  const [inspectorSearchQuery, setInspectorSearchQuery] =
-    useState('-- None --');
-  const [inspectorMemCount, setInspectorMemCount] = useState(0);
-  const [inspectorKnowCount, setInspectorKnowCount] = useState(0);
+  const [inspectorSearchQuery] = useState('-- None --');
   const [inspectorMemCandidate, setInspectorMemCandidate] = useState(
-    'Awaiting conversation input...',
+    'No active conversation turns recorded yet.',
   );
 
   // Memory Tab State
@@ -88,6 +86,9 @@ export const AIMemoryDashboard: React.FC = () => {
   const [uploadChunkSize, setUploadChunkSize] = useState(1000);
   const [uploadChunkOverlap, setUploadChunkOverlap] = useState(200);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string>(
+    'Click to select a file (.txt or .pdf)',
+  );
   const [isUploading, setIsUploading] = useState(false);
   const [knowSearchQuery, setKnowSearchQuery] = useState('');
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeItem[]>([]);
@@ -96,10 +97,26 @@ export const AIMemoryDashboard: React.FC = () => {
   const [contextHistoryJson, setContextHistoryJson] = useState(
     JSON.stringify(
       [
-        { role: 'user', content: 'I am working on a new backend service.' },
+        {
+          role: 'user',
+          content: 'Hi',
+        },
         {
           role: 'assistant',
-          content: 'Great! Which programming language do you plan to use?',
+          content: 'Hi, How can I assist you',
+        },
+        {
+          role: 'user',
+          content:
+            'No Assistance needed right now. just here to share my coding preference.',
+        },
+        {
+          role: 'assistant',
+          content: 'Great! Tell me what you prefer',
+        },
+        {
+          role: 'user',
+          content: 'I prefer Python for Backend',
         },
       ],
       null,
@@ -107,7 +124,7 @@ export const AIMemoryDashboard: React.FC = () => {
     ),
   );
   const [contextRawQuery, setContextRawQuery] = useState(
-    'I prefer Python for it.',
+    'what is my preference',
   );
   const [contextualizedResult, setContextualizedResult] = useState(
     '-- Click run to test --',
@@ -150,7 +167,6 @@ export const AIMemoryDashboard: React.FC = () => {
     const query = chatInput.trim();
     if (!query || isStreaming) return;
 
-    // Append user message immediately
     const updatedHistory: ChatMessage[] = [
       ...chatHistory,
       { role: 'user', content: query },
@@ -159,7 +175,6 @@ export const AIMemoryDashboard: React.FC = () => {
     setChatInput('');
     setIsStreaming(true);
 
-    // Prepare assistant placeholder message
     setChatHistory((prev) => [...prev, { role: 'assistant', content: '' }]);
 
     try {
@@ -192,7 +207,6 @@ export const AIMemoryDashboard: React.FC = () => {
           const chunk = decoder.decode(value, { stream: true });
           fullText += chunk;
 
-          // Update latest assistant message dynamically
           setChatHistory((prev) => {
             const next = [...prev];
             next[next.length - 1] = { role: 'assistant', content: fullText };
@@ -283,12 +297,40 @@ export const AIMemoryDashboard: React.FC = () => {
     }
   };
 
+  const testRelationship = async () => {
+    setClassResult('Classifying relationship...');
+    try {
+      const res = await fetch(getApiUrl('/classify_memory_relationship'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          existing_memory: classExisting,
+          new_memory: classNew,
+        }),
+      });
+      const data = await res.json();
+      setClassResult(JSON.stringify(data, null, 2));
+    } catch (err: any) {
+      setClassResult(`Error: ${err.message}`);
+    }
+  };
+
   // ----------------------------------------------------
   // 3. KNOWLEDGE HANDLERS
   // ----------------------------------------------------
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+      setSelectedFileName(e.target.files[0].name);
+    }
+  };
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      alert('Please select a .txt or .pdf file first.');
+      return;
+    }
 
     setIsUploading(true);
     const formData = new FormData();
@@ -298,9 +340,17 @@ export const AIMemoryDashboard: React.FC = () => {
       const url = `${getApiUrl('/add_memory_file_upload')}?chunk_size=${uploadChunkSize}&chunk_overlap=${uploadChunkOverlap}&user_id=${userId}`;
       const res = await fetch(url, { method: 'POST', body: formData });
       const data = await res.json();
+
       alert(
         `Document Processing Complete!\nChunks Stored: ${data.chunks_stored}`,
       );
+
+      // --- Reset file selection state & DOM input ---
+      setSelectedFile(null);
+      setSelectedFileName('Click to select a file (.txt or .pdf)');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (err: any) {
       alert(`Upload error: ${err.message}`);
     } finally {
@@ -360,7 +410,7 @@ export const AIMemoryDashboard: React.FC = () => {
               <h1 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
                 AI Memory + RAG Dashboard
                 <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  React Native UI
+                  Phase 10 Hardened
                 </span>
               </h1>
               <p className="text-xs text-slate-400">
@@ -582,27 +632,64 @@ export const AIMemoryDashboard: React.FC = () => {
                   Memory
                 </h2>
                 <form onSubmit={handleManualStore} className="space-y-3">
-                  <textarea
-                    value={storeText}
-                    onChange={(e) => setStoreText(e.target.value)}
-                    placeholder="e.g., I prefer using FastAPI over Flask."
-                    required
-                    rows={2}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Memory Statement
+                    </label>
+                    <textarea
+                      value={storeText}
+                      onChange={(e) => setStoreText(e.target.value)}
+                      placeholder="e.g., I prefer using FastAPI over Flask."
+                      required
+                      rows={2}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">
+                        Type
+                      </label>
+                      <select
+                        value={storeType}
+                        onChange={(e) => setStoreType(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="fact">fact</option>
+                        <option value="preference">preference</option>
+                        <option value="instruction">instruction</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">
+                        Importance (<span>{storeImportance}</span>)
+                      </label>
+                      <input
+                        type="range"
+                        min="0.0"
+                        max="1.0"
+                        step="0.1"
+                        value={storeImportance}
+                        onChange={(e) =>
+                          setStoreImportance(parseFloat(e.target.value))
+                        }
+                        className="w-full accent-indigo-500"
+                      />
+                    </div>
+                  </div>
                   <button
                     type="submit"
                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
                   >
-                    <Save className="w-3.5 h-3.5" /> Store Memory
+                    <Save className="w-3.5 h-3.5" /> Store via /store
                   </button>
                 </form>
               </div>
 
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
-                  <GitCompare className="w-4 h-4 text-amber-400" /> Conflict
-                  Detection
+                  <GitCompare className="w-4 h-4 text-amber-400" /> Relationship
+                  & Conflict Classifier
                 </h2>
                 <div className="space-y-2 text-xs">
                   <input
@@ -619,15 +706,278 @@ export const AIMemoryDashboard: React.FC = () => {
                     placeholder="New candidate memory"
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono"
                   />
-                  <button
-                    onClick={testConflict}
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 rounded-lg border border-slate-700 text-xs"
-                  >
-                    Test Conflict
-                  </button>
-                  <pre className="p-2 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono overflow-x-auto">
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={testConflict}
+                      className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 rounded-lg border border-slate-700 text-xs"
+                    >
+                      Test Conflict
+                    </button>
+                    <button
+                      onClick={testRelationship}
+                      className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 rounded-lg border border-slate-700 text-xs"
+                    >
+                      Classify Relation
+                    </button>
+                  </div>
+                  <pre className="p-2 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-mono overflow-x-auto whitespace-pre-wrap">
                     {classResult}
                   </pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Query Memory Vector Store */}
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                  <Search className="w-4 h-4 text-emerald-400" /> Query Memory
+                  Vector Store
+                </h2>
+                <div className="flex items-center gap-3 text-xs">
+                  <label className="flex items-center gap-1.5 text-slate-400">
+                    <span>Importance Weight:</span>
+                    <input
+                      type="checkbox"
+                      checked={memSearchWeight}
+                      onChange={(e) => setMemSearchWeight(e.target.checked)}
+                      className="accent-cyan-600 rounded"
+                    />
+                  </label>
+                  <div className="flex items-center gap-1 text-slate-400">
+                    <span>Threshold:</span>
+                    <input
+                      type="number"
+                      value={memSearchThresh}
+                      onChange={(e) =>
+                        setMemSearchThresh(Number(e.target.value))
+                      }
+                      step="0.05"
+                      className="w-14 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-slate-200 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleSearchMemory} className="flex gap-2">
+                <input
+                  type="text"
+                  value={memSearchQuery}
+                  onChange={(e) => setMemSearchQuery(e.target.value)}
+                  placeholder="Search memories (e.g., programming preferences)..."
+                  required
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono"
+                />
+                <button
+                  type="submit"
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                >
+                  <Search className="w-3.5 h-3.5" /> Search
+                </button>
+              </form>
+
+              {/* Memory Items List / Grid */}
+              <div id="memoryResultsList" className="space-y-2 text-xs">
+                {memoryResults.length === 0 ? (
+                  <div className="text-center py-6 text-slate-500">
+                    Run a search above to inspect active user memories in
+                    Qdrant.
+                  </div>
+                ) : (
+                  memoryResults.map((mem) => (
+                    <div
+                      key={mem.id}
+                      className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1"
+                    >
+                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>ID: {mem.id}</span>
+                        <span>Score: {mem.score.toFixed(3)}</span>
+                      </div>
+                      <p className="text-slate-200">{mem.text}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* KNOWLEDGE BASE TAB */}
+        {activeTab === 'knowledge' && (
+          <div className="h-full overflow-y-auto space-y-4 pr-1">
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-cyan-400" /> Upload
+                Document to Knowledge Base
+              </h2>
+
+              <form onSubmit={handleFileUpload} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Chunk Size (chars)
+                    </label>
+                    <input
+                      type="number"
+                      value={uploadChunkSize}
+                      onChange={(e) =>
+                        setUploadChunkSize(Number(e.target.value))
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Chunk Overlap (chars)
+                    </label>
+                    <input
+                      type="number"
+                      value={uploadChunkOverlap}
+                      onChange={(e) =>
+                        setUploadChunkOverlap(Number(e.target.value))
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="border-2 border-dashed border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 text-center bg-slate-950/50 transition-colors">
+                  <input
+                    type="file"
+                    id="knowledgeFile"
+                    ref={fileInputRef}
+                    accept=".txt,.pdf"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <label
+                    htmlFor="knowledgeFile"
+                    className="cursor-pointer flex flex-col items-center justify-center space-y-1"
+                  >
+                    <FilePlus className="w-8 h-8 text-slate-500" />
+                    <span className="text-xs text-slate-300 font-medium">
+                      {selectedFileName}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Will be chunked and indexed into 'knowledge' collection
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                >
+                  <FileUp className="w-3.5 h-3.5" />
+                  {isUploading ? 'Processing...' : 'Process & Index Document'}
+                </button>
+              </form>
+            </div>
+
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md space-y-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-cyan-400" /> Search Reranked
+                Knowledge Base
+              </h2>
+
+              <form onSubmit={handleSearchKnowledge} className="flex gap-2">
+                <input
+                  type="text"
+                  value={knowSearchQuery}
+                  onChange={(e) => setKnowSearchQuery(e.target.value)}
+                  placeholder="Search ingested files & documents..."
+                  required
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono"
+                />
+                <button
+                  type="submit"
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                >
+                  <Search className="w-3.5 h-3.5" /> Search
+                </button>
+              </form>
+
+              <div className="space-y-2 text-xs">
+                {knowledgeResults.length === 0 ? (
+                  <div className="text-center py-6 text-slate-500">
+                    Search to view reranked document chunks from Qdrant.
+                  </div>
+                ) : (
+                  knowledgeResults.map((res) => (
+                    <div
+                      key={res.id}
+                      className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1"
+                    >
+                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>ID: {res.id}</span>
+                        <span>Score: {res.score.toFixed(3)}</span>
+                      </div>
+                      <p className="text-slate-200">{res.text}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CONTEXTUALIZE QUERY TESTER TAB */}
+        {activeTab === 'contextualize' && (
+          <div className="h-full overflow-y-auto space-y-4 pr-1">
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md max-w-3xl mx-auto space-y-4">
+              <div>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                  <Wand2 className="w-4 h-4 text-cyan-400" /> Test Query
+                  Reformulation Engine
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Test how the system transforms vague or follow-up queries
+                  (e.g. "what is my preference?") into standalone queries using
+                  chat history.
+                </p>
+              </div>
+
+              <form onSubmit={handleContextualizeTest} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">
+                    Simulated Recent Chat History (JSON Format)
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={contextHistoryJson}
+                    onChange={(e) => setContextHistoryJson(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">
+                    Latest Ambiguous Follow-up Query
+                  </label>
+                  <input
+                    type="text"
+                    value={contextRawQuery}
+                    onChange={(e) => setContextRawQuery(e.target.value)}
+                    required
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                >
+                  <Play className="w-3.5 h-3.5" /> Run Contextualization
+                </button>
+              </form>
+
+              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                  Reformulated Standalone Output
+                </span>
+                <div className="font-mono text-xs text-cyan-300 whitespace-pre-wrap">
+                  {contextualizedResult}
                 </div>
               </div>
             </div>
